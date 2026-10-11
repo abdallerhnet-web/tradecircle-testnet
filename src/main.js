@@ -307,18 +307,33 @@ function regBar() {
   return '<div class="note xs row sp wrap-r"><span>Registry <a href="' + addrUrl(S.reg) + '" target="_blank" rel="noopener" style="color:var(--blue)">' + esc(short(S.reg)) + '</a></span>' +
     '<span class="row"><button class="btn sm ghost" data-act="share">Copy invite link</button><button class="btn sm ghost" data-act="refresh">' + (S.loading ? 'Loading…' : 'Refresh') + '</button></span></div>';
 }
+function hiddenRooms() { try { return JSON.parse(ls('tc_hid_' + S.reg) || '[]'); } catch (e) { return []; } }
+function gettingStarted(rooms) {
+  const mine = rooms.filter(r => isMember(r));
+  const steps = [
+    ['Connect your wallet', !!(S.acct && S.chainOk)],
+    ['Create a room, or join one from an invite link', mine.length > 0],
+    ['Add a proposal: ticker, entry, stop, target, reason', mine.some(r => roomProps(r.id).length > 0)],
+    ['Share the invite link so friends can vote', false]
+  ];
+  if (steps[2][1] && steps[1][1] && steps[0][1]) return '';
+  return '<div class="card stack"><div class="lbl">Quick start</div>' + steps.slice(0, 3).map((t, i) => '<div class="row"><span class="chip nodot ' + (t[1] ? 'ok' : '') + '">' + (t[1] ? '✓' : i + 1) + '</span><span class="sm ' + (t[1] ? 'mute' : '') + '">' + t[0] + '</span></div>').join('') + '</div>';
+}
 function vRooms() {
   let h = connectCard();
   if (!S.reg) return h + vSetup();
   h += regBar();
   if (S.err) h += '<div class="note" style="border-color:var(--red-ln);color:var(--red)">' + esc(S.err) + '</div>';
-  const rooms = [...S.rooms.values()].sort((a, b) => Number(b.id) - Number(a.id));
+  const allRooms = [...S.rooms.values()].sort((a, b) => Number(b.id) - Number(a.id));
+  const hid = hiddenRooms(), rooms = S.showHidden ? allRooms : allRooms.filter(r => !hid.includes(r.id));
+  h += gettingStarted(allRooms);
   h += '<div class="card stack"><div class="lbl">Create a room</div><div class="f"><label for="rn">Room name</label><input id="rn" maxlength="80" placeholder="e.g. Kaduna swing traders"></div>' +
     '<button class="btn pri blk" data-act="newroom"' + (S.busy ? ' disabled' : '') + '>Create room</button><p class="xs dim">Sends one on-chain transaction. You become the first member.</p></div>';
   h += '<div class="lbl">Rooms</div>';
   if (!S.loaded || (S.loading && !rooms.length)) h += '<div class="sk"></div><div class="sk"></div>';
-  else if (!rooms.length) h += '<div class="empty">No rooms on this registry yet. Create the first one above.</div>';
+  else if (!rooms.length) h += '<div class="empty">' + (allRooms.length ? 'All rooms are hidden.' : 'No rooms yet. Type a name above and tap Create room.') + '</div>';
   else h += '<div class="stack cards">' + rooms.map(r => '<button class="card" data-act="room" data-id="' + esc(r.id) + '" style="text-align:left;cursor:pointer"><div class="row sp"><b>' + esc(r.name) + '</b><span class="src calc">On-chain</span></div><div class="xs mute" style="margin-top:6px">' + r.members.size + ' member' + (r.members.size === 1 ? '' : 's') + ' · ' + roomProps(r.id).length + ' proposal' + (roomProps(r.id).length === 1 ? '' : 's') + ' · created by ' + esc(short(r.creator)) + '</div></button>').join('') + '</div>';
+  if (hid.length) h += '<button class="btn sm ghost" data-act="showhid">' + (S.showHidden ? 'Hide removed rooms' : 'Show ' + hid.length + ' removed room' + (hid.length === 1 ? '' : 's')) + '</button>';
   return h;
 }
 function propRow(p) {
@@ -338,7 +353,9 @@ function vRoom(id) {
   if (!mem) h += '<div class="card stack"><p class="sm mute">Only members can propose and vote. Joining is one on-chain transaction from your wallet.</p><button class="btn pri blk" data-act="join" data-id="' + esc(id) + '"' + (S.busy ? ' disabled' : '') + '>Join this room</button></div>';
   else h += '<button class="btn pri blk" data-act="newprop" data-id="' + esc(id) + '">New proposal</button>';
   h += '<div class="lbl">Proposals</div>';
-  h += ps.length ? '<div class="stack cards">' + ps.map(propRow).join('') + '</div>' : '<div class="empty">No proposals yet.</div>';
+  h += ps.length ? '<div class="stack cards">' + ps.map(propRow).join('') + '</div>' : '<div class="empty">No proposals yet. ' + (mem ? 'Tap New proposal to share your first trade idea.' : 'Join the room to add one.') + '</div>';
+  const isH = hiddenRooms().includes(id);
+  h += '<div class="card stack"><div class="lbl">Remove this room</div><p class="sm mute">Rooms live on the blockchain, so nobody can delete them, not even you. You can remove it from your list on this device. Everyone else still sees it, and you can bring it back any time.</p><button class="btn blk" data-act="' + (isH ? 'unhide' : 'hide') + '" data-id="' + esc(id) + '">' + (isH ? 'Bring back to my list' : 'Remove from my list') + '</button></div>';
   return h;
 }
 function vNew(id) {
@@ -491,6 +508,9 @@ document.addEventListener('click', async ev => {
     const h = await send('createRoom', [n], 'Room created');
     if (h) { const mine = [...S.rooms.values()].filter(r => same(r.creator, S.acct)).sort((x, y) => Number(y.id) - Number(x.id))[0]; if (mine) go('room/' + mine.id); }
   }
+  else if (a === 'hide') { if (confirm('Remove this room from your list? It stays on-chain and you can bring it back.')) { ls('tc_hid_' + S.reg, JSON.stringify([...new Set([...hiddenRooms(), id])])); toast('Removed from your list'); go('rooms'); } }
+  else if (a === 'unhide') { ls('tc_hid_' + S.reg, JSON.stringify(hiddenRooms().filter(x => x !== id))); toast('Brought back'); render(); }
+  else if (a === 'showhid') { S.showHidden = !S.showHidden; render(); }
   else if (a === 'join') await send('join', [BigInt(id)], 'Joined');
   else if (a === 'vote') await send('castVote', [BigInt(id), Number(b.dataset.v)], 'Vote recorded');
   else if (a === 'close') await send('closeVoting', [BigInt(id)], 'Voting closed');
