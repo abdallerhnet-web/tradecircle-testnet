@@ -265,7 +265,7 @@ function propRow(p) {
   const d = p.data, t = tally(p);
   return '<button class="card" data-act="prop" data-id="' + esc(p.id) + '" style="text-align:left;cursor:pointer"><div class="row sp"><div class="row"><b class="mono">' + esc(d ? d.pair : '—') + '</b>' + (d ? '<span class="dir" style="' + (d.dir === 'long' ? 'color:var(--green);background:var(--green-bg)' : 'color:var(--red);background:var(--red-bg)') + '">' + (d.dir === 'long' ? 'LONG' : 'SHORT') + '</span>' : '') + '</div>' +
     '<span class="chip nodot ' + (p.closed ? '' : 'info') + '">' + (p.closed ? 'CLOSED' : 'VOTING') + '</span></div>' +
-    '<div class="xs mute" style="margin-top:6px">' + t.y + ' for · ' + t.n + ' against · ' + t.ab + ' abstain · by ' + esc(short(p.author)) + '</div></button>';
+    '<div class="xs mute" style="margin-top:6px">' + (d ? 'Entry ' + esc(d.entry) + ' · Stop ' + esc(d.stop) + ' · Target ' + esc(d.target) + ' <span class="dim">(typed by proposer)</span><br>' : '') + t.y + ' for · ' + t.n + ' against · ' + t.ab + ' abstain · by ' + esc(short(p.author)) + '</div><div class="row sp" style="margin-top:10px"><span class="sm" style="color:var(--blue)">' + (p.closed ? 'View result ›' : 'Open &amp; vote ›') + '</span></div></button>';
 }
 function vRoom(id) {
   const r = S.rooms.get(id);
@@ -274,6 +274,7 @@ function vRoom(id) {
   let h = '<div class="row sp"><button class="btn sm ghost" data-act="rooms">‹ Rooms</button>' + (mem ? '<span class="chip ok">MEMBER</span>' : '') + '</div>' +
     '<div><div class="lbl">Room #' + esc(r.id) + '</div><h1 style="font:600 26px var(--f-disp);margin:6px 0 4px;letter-spacing:-.02em">' + esc(r.name) + '</h1><div class="xs mute">' + r.members.size + ' members · created by ' + esc(short(r.creator)) + '</div></div>';
   h += connectCard();
+  h += '<div class="card stack"><div class="lbl">Add members</div><p class="sm mute">Members join themselves. Copy the invite link, send it to them, and they open it in their wallet\'s browser, connect, and tap Join this room.</p><button class="btn blk" data-act="share">Copy invite link for this room</button></div>';
   if (!mem) h += '<div class="card stack"><p class="sm mute">Only members can propose and vote. Joining is one on-chain transaction from your wallet.</p><button class="btn pri blk" data-act="join" data-id="' + esc(id) + '"' + (S.busy ? ' disabled' : '') + '>Join this room</button></div>';
   else h += '<button class="btn pri blk" data-act="newprop" data-id="' + esc(id) + '">New proposal</button>';
   h += '<div class="lbl">Proposals</div>';
@@ -322,7 +323,7 @@ function reviewHTML(d) {
   const L = (t, a) => a.length ? '<div><div class="lbl">' + t + '</div><ul style="margin:8px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:5px" class="sm">' + a.map(x => '<li>' + esc(typeof x === 'string' ? x : x.point) + '</li>').join('') + '</ul></div>' : '';
   return '<div class="card stack"><div class="row sp"><div class="lbl">Review</div><span class="src none">Rules-based</span></div>' +
     '<p class="sm mute">A checklist applied to the text above. It does not check facts, prices or sources, and is not an AI model.</p>' +
-    L('Missing', rv.missing) + L('Counter-case', rv.counter) + L('Assumptions', rv.assumptions) + L('Invalidation', rv.invalidation) + L('Risks', rv.risks) + '</div>';
+    L('Questions to ask the proposer', rv.missing.map(m => m.replace(/^No /, 'Can you add ').replace(/\.$/, '?')).concat(['What would make you exit before the stop?', 'Is an earnings or macro date inside your time horizon?'])) + L('Missing', rv.missing) + L('Counter-case', rv.counter) + L('Assumptions', rv.assumptions) + L('Invalidation', rv.invalidation) + L('Risks', rv.risks) + '</div>';
 }
 function vProp(id) {
   const p = S.props.get(id);
