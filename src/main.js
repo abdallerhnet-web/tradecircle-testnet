@@ -344,7 +344,7 @@ function bgResults() {
 }
 function readForm() {
   const g = i => ($('#' + i) || {}).value || '';
-  return { pair: g('np-pair').trim().toUpperCase(), dir: (S.draft && S.draft.dir) || 'long', entry: g('np-entry').trim(), stop: g('np-stop').trim(), target: g('np-target').trim(), size: g('np-size').trim(), horizon: g('np-h'), thesis: g('np-th').trim(), evidence: g('np-ev') };
+  return { pair: g('np-pair').replace(/[^A-Za-z0-9.\-]/g, '').toUpperCase().slice(0, 12), dir: (S.draft && S.draft.dir) || 'long', entry: g('np-entry').trim(), stop: g('np-stop').trim(), target: g('np-target').trim(), size: g('np-size').trim(), horizon: g('np-h'), thesis: g('np-th').trim(), evidence: g('np-ev') };
 }
 function riskHTML(d) {
   const rk = riskCalc(d);
