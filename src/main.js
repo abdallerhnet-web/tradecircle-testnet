@@ -292,7 +292,7 @@ function vLanding() {
     '<div class="row"><span class="src user">User-provided</span><span class="sm mute">Prices, levels and thesis typed by a member. Not verified</span></div>' +
     '<div class="row"><span class="src calc">Computed</span><span class="sm mute">Risk math from the member\'s own numbers</span></div>' +
     '<div class="row"><span class="src none">Rules-based</span><span class="sm mute">Checklist review. Not an AI model, not advice</span></div>' +
-    '</div><p class="fine">There is no live market data in this app. Prices are whatever members enter. Testnet only; not financial advice. Real tokenized-stock products can be restricted for US persons.</p></section>';
+    '</div><p class="fine">Proposal prices are entered by members. The Markets tab and price checks show Bitget live token prices, which are not verified stock prices. Testnet only; not financial advice. Real tokenized-stock products can be restricted for US persons.</p></section>';
 }
 function vSetup() {
   return '<div class="card stack"><div class="lbl">Registry</div>' +
@@ -536,6 +536,6 @@ document.addEventListener('submit', async ev => {
     } catch (e) { /* not connected yet */ }
   }
   await load();
-  setInterval(() => { if (route().name === 'markets' && !document.hidden && !S.mk.loading) { S.mk.items = S.mk.items; S.mk.loading = false; api('action=list').then(j => { S.mk.items = j.results || []; S.mk.at = Date.now(); if (route().name === 'markets') { const el = $('#mk-list'); if (el) el.innerHTML = mkRows(false); } }).catch(() => {}); }
+  setInterval(() => { if (route().name === 'markets' && !document.hidden && !S.mk.loading) { api('action=list').then(j => { S.mk.items = j.results || []; S.mk.at = Date.now(); if (route().name === 'markets') { const el = $('#mk-list'); if (el) el.innerHTML = mkRows(false); } }).catch(() => {}); }
    if (S.reg && !S.busy && !document.hidden && /^(room|p)$/.test(route().name)) load(); }, 20000);
 })();
