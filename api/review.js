@@ -9,8 +9,8 @@ export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return res.status(503).json({ error: 'AI review is not enabled on this deployment yet.' });
+  const key = process.env.ANTHROPIC_API_KEY, gkey = process.env.GEMINI_API_KEY;
+  if (!key && !gkey) return res.status(503).json({ error: 'AI review is not enabled on this deployment yet.' });
   const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'x';
   const now = Date.now(), arr = (hits.get(ip) || []).filter(t => now - t < 600000);
   if (arr.length >= 8) return res.status(429).json({ error: 'Too many AI reviews. Try again in a few minutes.' });
@@ -20,6 +20,17 @@ export default async function handler(req, res) {
     const s = (v, n) => String(v == null ? '' : v).slice(0, n);
     const p = { ticker: s(b.pair, 12), direction: b.dir === 'short' ? 'short' : 'long', entry: s(b.entry, 24), stop: s(b.stop, 24), target: s(b.target, 24), size_usd: s(b.size, 24), horizon: s(b.horizon, 80), thesis: s(b.thesis, 1500), evidence: (Array.isArray(b.evidence) ? b.evidence : []).slice(0, 8).map(x => s(x, 300)), bitget_token_price_note: b.live ? s(b.live, 40) : 'none attached' };
     if (!p.ticker || !p.thesis) return res.status(400).json({ error: 'Proposal is missing a ticker or thesis.' });
+    let text = '', model = MODEL;
+    if (!key) {
+      model = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+      const gr = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
+        method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': gkey },
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM }] }, contents: [{ role: 'user', parts: [{ text: '<proposal>\n' + JSON.stringify(p, null, 1) + '\n</proposal>' }] }], generationConfig: { maxOutputTokens: 900, responseMimeType: 'application/json' } }),
+      });
+      const gj = await gr.json().catch(() => ({}));
+      if (!gr.ok) return res.status(502).json({ error: 'AI service error (' + gr.status + '): ' + s(gj && gj.error && gj.error.message, 160) });
+      text = (((gj.candidates || [])[0] || {}).content || {}).parts ? gj.candidates[0].content.parts.map(x => x.text || '').join('').trim() : '';
+    } else {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
@@ -27,11 +38,12 @@ export default async function handler(req, res) {
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) return res.status(502).json({ error: 'AI service error (' + r.status + '): ' + s(j && j.error && j.error.message, 160) });
-    const text = (j.content || []).map(c => c.text || '').join('').trim();
+    text = (j.content || []).map(c => c.text || '').join('').trim();
+    }
     const m = text.match(/\{[\s\S]*\}/);
     const o = JSON.parse(m ? m[0] : text);
     const arrS = (a, n) => (Array.isArray(a) ? a : []).filter(x => typeof x === 'string').slice(0, n).map(x => x.slice(0, 240));
-    return res.status(200).json({ model: MODEL, summary: s(o.summary, 260), questions: arrS(o.questions, 5), weak_points: arrS(o.weak_points, 4), missing: arrS(o.missing, 4), risks: arrS(o.risks, 4) });
+    return res.status(200).json({ model, summary: s(o.summary, 260), questions: arrS(o.questions, 5), weak_points: arrS(o.weak_points, 4), missing: arrS(o.missing, 4), risks: arrS(o.risks, 4) });
   } catch (e) {
     return res.status(502).json({ error: 'Could not produce a review: ' + s(e && e.message, 120) });
   }
