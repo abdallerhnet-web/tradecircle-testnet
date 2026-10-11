@@ -127,7 +127,7 @@ ul.pts{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px} ul
 .tabs button.on{color:var(--fg);background:var(--s3)} .tabs button.on svg{stroke:var(--blue)}
 .tabs button.plus{color:var(--fg)}
 .tabs button.plus svg{background:linear-gradient(180deg,#7DB4FF,var(--blue2));stroke:var(--blue-ink);border-radius:10px;padding:4px;width:30px;height:30px;stroke-width:2.2;margin-top:-2px}
-#toast{position:fixed;left:16px;right:16px;bottom:calc(94px + env(safe-area-inset-bottom,0px));z-index:50;display:flex;justify-content:center;pointer-events:none}
+#toast{position:fixed;left:16px;right:16px;top:calc(72px + env(safe-area-inset-top,0px));z-index:50;display:flex;justify-content:center;pointer-events:none}
 #toast div{background:var(--s3);border:1px solid var(--line2);padding:11px 15px;border-radius:14px;font-size:14px;max-width:520px;box-shadow:0 14px 40px -8px rgba(0,0,0,.8)}
 #toast div.ok{border-color:var(--green-ln)} #toast div.bad{border-color:var(--red-ln)}
 .sk{height:72px;border-radius:16px;background:linear-gradient(90deg,var(--s1),var(--s2),var(--s1));background-size:200% 100%;animation:sk 1.3s linear infinite}

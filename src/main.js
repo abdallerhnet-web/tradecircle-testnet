@@ -46,14 +46,19 @@ const addrUrl = a => CHAIN.blockExplorers.default.url + '/address/' + a;
 
 async function connect() {
   const eth = window.ethereum;
-  if (!eth) { toast('No wallet found. Open this page inside your wallet app\'s browser (MetaMask, Rabby, Trust, Coinbase Wallet).', 'bad'); return; }
+  S.walletMsg = '';
+  if (!eth) { S.walletMsg = 'No wallet detected in this browser. Open this page from inside your wallet app\'s built-in browser.'; render(); return; }
+  S.walletMsg = 'Waiting for your wallet… check for a popup.'; render();
   try {
+    const accts = await eth.request({ method: 'eth_requestAccounts' });
+    if (!accts || !accts[0]) throw new Error('Wallet returned no account.');
     S.wc = createWalletClient({ chain: CHAIN, transport: custom(eth) });
-    const [a] = await S.wc.requestAddresses();
-    S.acct = a;
-    await ensureChain();
+    S.acct = accts[0];
+    S.walletMsg = '';
     wire(eth);
-  } catch (e) { toast(friendly(e), 'bad'); }
+    render();
+    await ensureChain();
+  } catch (e) { S.walletMsg = 'Connect failed: ' + friendly(e) + (e && e.code ? ' (code ' + e.code + ')' : ''); }
   render();
 }
 let wired = false;
@@ -71,7 +76,7 @@ async function ensureChain() {
   try { await S.wc.switchChain({ id: CHAIN.id }); }
   catch (e) {
     try { await S.wc.addChain({ chain: CHAIN }); await S.wc.switchChain({ id: CHAIN.id }); }
-    catch (e2) { toast('Could not switch to Robinhood Chain Testnet: ' + friendly(e2), 'bad'); }
+    catch (e2) { S.walletMsg = 'Could not add or switch to Robinhood Chain Testnet: ' + friendly(e2) + (e2 && e2.code ? ' (code ' + e2.code + ')' : ''); }
   }
   await checkChain();
 }
@@ -207,6 +212,8 @@ function connectCard() {
   return '<div class="card stack"><div class="lbl">Wallet</div>' +
     '<p class="sm mute">Your wallet address is your account. Open this page inside your wallet app\'s browser, then connect. Testnet only: no real funds are used.</p>' +
     '<button class="btn pri blk" data-act="connect"' + (S.busy ? ' disabled' : '') + '>' + (S.acct ? 'Switch to Robinhood Chain Testnet' : 'Connect wallet') + '</button>' +
+    (S.walletMsg ? '<div class="note sm" style="border-color:var(--amber-ln);color:var(--fg)">' + esc(S.walletMsg) + '</div>' : '') +
+    '<div class="xs dim">Wallet detected: ' + (window.ethereum ? 'yes' : 'no') + (S.acct ? ' · account ' + esc(short(S.acct)) : '') + ' · network ' + (S.chainOk ? 'correct' : 'not Robinhood Testnet') + '</div>' +
     '<p class="xs dim">You need a little testnet ETH for gas. Faucet (listed by third parties, not confirmed in the official docs): <a href="' + FAUCET + '" target="_blank" rel="noopener" style="color:var(--blue)">' + FAUCET.replace('https://', '') + '</a></p></div>';
 }
 function vLanding() {
