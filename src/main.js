@@ -243,7 +243,7 @@ function mkRows(pick) {
   const f = (S.mk.filter || '').trim().toUpperCase();
   const items = (S.mk.items || []).filter(x => !f || x.base.toUpperCase().includes(f) || x.symbol.toUpperCase().includes(f));
   if (!S.mk.items) return S.mk.loading ? '<div class="sk"></div><div class="sk"></div>' : '';
-  if (!items.length) return '<div class="empty">No Bitget stock-token market matches that search.</div>';
+  if (!items.length) return '<div class="empty">No stock-token match for ' + esc(f || 'that') + ' in the list.' + (f ? '<br><button class="btn sm" data-act="mkall" style="margin-top:10px">Search ALL Bitget markets for ' + esc(f) + '</button>' : '') + '</div>';
   return '<div class="mk-list">' + items.map(x => {
     const ch = isFinite(num(x.change24h)) ? num(x.change24h) * 100 : NaN;
     const inner = '<span><b class="mono">' + esc(x.base.replace(/^r/, '')) + '</b><span class="xs dim"> ' + esc(x.symbol) + '</span></span><span class="mono">' + (x.price ? esc(x.price) : '—') + '</span><span class="mono xs ' + (ch >= 0 ? 'up' : 'down') + '">' + (isFinite(ch) ? (ch >= 0 ? '+' : '') + ch.toFixed(2) + '%' : '') + '</span>';
@@ -495,6 +495,7 @@ document.addEventListener('click', async ev => {
   else if (a === 'prop') go('p/' + id);
   else if (a === 'newprop') { S.draft = null; S.bg = { results: null, loading: false, err: '', picked: null }; go('new/' + id); }
   else if (a === 'markets') go('markets');
+  else if (a === 'mkall') { const t = (S.mk.filter || '').trim(); try { const j = await api('action=search&q=' + encodeURIComponent(t)); const r = j.results || []; if (!r.length) toast('Bitget has no spot market named ' + t + '. It may not be listed there.', 'bad'); else { S.mk.items = r.map(x => ({ symbol: x.symbol, base: x.base, price: x.price, change24h: null, vol: 0, ts: x.ts })); S.mk.at = Date.now(); render(); toast(r.length + ' found for ' + t); } } catch (e) { toast('Search failed: ' + (e.message || e), 'bad'); } }
   else if (a === 'mkrefresh') { S.mk.items = null; S.mk.err = ''; await fetchMarkets(); }
   else if (a === 'mktoggle') { S.draft = Object.assign(readForm(), { dir: (S.draft && S.draft.dir) || 'long' }); S.mkOpen = !S.mkOpen; render(); if (S.mkOpen && !S.mk.items) fetchMarkets(); }
   else if (a === 'mkpick') { const pi = $('#np-pair'); if (pi) pi.value = b.dataset.b; S.mkOpen = false; bgPick(b.dataset.s, b.dataset.p, b.dataset.t); }

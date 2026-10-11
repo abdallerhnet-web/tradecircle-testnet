@@ -7,6 +7,10 @@ async function get(path) {
   if (j.code !== '00000') throw new Error('Bitget: ' + (j.msg || j.code));
   return j.data;
 }
+// Popular US tickers, used only to recognise stock-token names that don't follow the 'r' prefix (e.g. TSLAX, NVDAON). Names only, no prices.
+const TICKERS = 'AAPL MSFT NVDA TSLA AMZN GOOGL GOOG META NFLX AMD INTC AVGO ORCL CRM ADBE QQQ SPY COIN MSTR HOOD PLTR BABA UBER DIS NKE KO PEP WMT JPM BAC V MA PYPL SHOP SNOW SQ XOM CVX PFE JNJ LLY ABBV MRK CSCO IBM QCOM MU TSM ARM SMCI CRCL GME AMC'.split(' ');
+const STOCK_RE = new RegExp('^(?:R|X)?(?:' + TICKERS.join('|') + ')(?:X|ON)?$', 'i');
+const isStockTok = b => /^r[A-Z0-9]{2,7}$/.test(b) || STOCK_RE.test(b);
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 's-maxage=10, stale-while-revalidate=20');
   res.setHeader('Content-Type', 'application/json');
@@ -33,7 +37,7 @@ export default async function handler(req, res) {
       // Bitget's tokenized-stock markets, as observed, use a lowercase 'r' prefix on the base coin (e.g. rNVDA). This is a naming heuristic, not an official classification.
       const [syms, ticks] = await Promise.all([get('/public/symbols'), get('/market/tickers')]);
       const px = new Map(ticks.map(t => [t.symbol, t]));
-      const out = syms.filter(s => s.status === 'online' && s.quoteCoin === 'USDT' && /^r[A-Z0-9]{2,7}$/.test(s.baseCoin))
+      const out = syms.filter(s => s.status === 'online' && s.quoteCoin === 'USDT' && isStockTok(s.baseCoin))
         .map(s => { const t = px.get(s.symbol) || {}; return { symbol: s.symbol, base: s.baseCoin, price: t.lastPr || null, change24h: t.change24h || null, vol: Number(t.usdtVolume) || 0, ts: t.ts ? Number(t.ts) : null }; })
         .sort((x, y) => y.vol - x.vol).slice(0, 300);
       return res.status(200).json({ results: out, source: 'Bitget spot (public API)', fetchedAt: Date.now() });
