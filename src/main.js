@@ -35,7 +35,7 @@ const S = {
   reg: (ls('tc_reg') && isAddress(ls('tc_reg'))) ? ls('tc_reg') : (isAddress(ENV_REG) ? ENV_REG : ''),
   from: ls('tc_from') || ENV_FROM,
   rooms: new Map(), props: new Map(), loaded: false, loading: false, err: '', busy: false,
-  draft: null, mk: { items: null, loading: false, err: '', at: 0, filter: '' }, mkOpen: false, bg: { results: null, loading: false, err: '', picked: null }, live: {},
+  draft: null, mk: { items: null, loading: false, err: '', at: 0, filter: '' }, ai: {}, mkOpen: false, bg: { results: null, loading: false, err: '', picked: null }, live: {},
 };
 
 /* ================= wallet ================= */
@@ -403,6 +403,15 @@ function riskHTML(d) {
   h += rk.flags.map(f => '<div class="note xs" style="' + (f.level === 'bad' ? 'color:var(--red);border-color:var(--red-ln)' : f.level === 'warn' ? 'color:var(--amber);border-color:var(--amber-ln)' : '') + '">' + esc(f.text) + '</div>').join('') + '</div>';
   return h;
 }
+function aiHTML(d, id) {
+  const a = S.ai[id] || {};
+  const L = (t, arr) => arr && arr.length ? '<div><div class="lbl">' + t + '</div><ul style="margin:8px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:5px" class="sm">' + arr.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>' : '';
+  let b = '<div class="card stack"><div class="row sp"><div class="lbl">AI review</div><span class="src none">AI-generated</span></div>';
+  if (a.res) b += '<p class="sm">' + esc(a.res.summary) + '</p>' + L('Questions to ask', a.res.questions) + L('Weak points', a.res.weak_points) + L('Missing', a.res.missing) + L('Risks', a.res.risks) + '<div class="note xs">Written by an AI model (' + esc(a.res.model) + ') from the text above only. It cannot see live prices or news, can be wrong, and is not advice. Not stored on-chain.</div>';
+  else b += '<p class="sm mute">Ask an AI model to challenge this proposal: sharp questions, weak points, what is missing. It only reads the text above and never recommends a trade.</p>';
+  if (a.err) b += '<div class="note xs" style="color:var(--red);border-color:var(--red-ln)">' + esc(a.err) + '</div>';
+  return b + '<button class="btn blk" data-act="airev" data-id="' + esc(id) + '"' + (a.loading ? ' disabled' : '') + '>' + (a.loading ? 'Thinking…' : (a.res ? 'Run again' : 'Ask AI to review')) + '</button></div>';
+}
 function reviewHTML(d) {
   const rv = ruleReview(d);
   const L = (t, a) => a.length ? '<div><div class="lbl">' + t + '</div><ul style="margin:8px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:5px" class="sm">' + a.map(x => '<li>' + esc(typeof x === 'string' ? x : x.point) + '</li>').join('') + '</ul></div>' : '';
@@ -431,7 +440,7 @@ function vProp(id) {
     '<div class="sm" style="white-space:pre-wrap">' + esc(d.thesis) + '</div>' +
     (d.evidence.length ? '<div><div class="lbl">Evidence</div><ul class="sm" style="margin:8px 0 0;padding-left:18px">' + d.evidence.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>' : '') +
     '<div class="row xs ' + (p.hashOk ? 'up' : 'down') + '">' + (p.hashOk ? '✓ Text matches the hash recorded on-chain' : '✗ Text does NOT match the on-chain hash') + '</div></div>';
-  h += riskHTML(d) + reviewHTML(d);
+  h += riskHTML(d) + aiHTML(d, id) + reviewHTML(d);
   const pct = x => t.total ? Math.round(x / t.total * 100) : 0;
   h += '<div class="card stack"><div class="row sp"><div class="lbl">Votes</div><span class="src calc">On-chain</span></div>' +
     '<div class="bar"><i style="width:' + pct(t.y) + '%;background:var(--green)"></i><i style="width:' + pct(t.n) + '%;background:var(--red)"></i><i style="width:' + pct(t.ab) + '%;background:var(--dim)"></i></div>' +
@@ -512,6 +521,17 @@ document.addEventListener('click', async ev => {
   else if (a === 'hide') { if (confirm('Remove this room from your list? It stays on-chain and you can bring it back.')) { ls('tc_hid_' + S.reg, JSON.stringify([...new Set([...hiddenRooms(), id])])); toast('Removed from your list'); go('rooms'); } }
   else if (a === 'unhide') { ls('tc_hid_' + S.reg, JSON.stringify(hiddenRooms().filter(x => x !== id))); toast('Brought back'); render(); }
   else if (a === 'showhid') { S.showHidden = !S.showHidden; render(); }
+  else if (a === 'airev') {
+    const p = S.props.get(id); if (!p || !p.data) return;
+    S.ai[id] = { loading: true }; render();
+    try {
+      const d = p.data;
+      const r = await fetch('/api/review', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pair: d.pair, dir: d.dir, entry: d.entry, stop: d.stop, target: d.target, size: d.size, horizon: d.horizon, thesis: d.thesis, evidence: d.evidence, live: d.bitget ? d.bitget.symbol + ' ' + d.bitget.price : '' }) });
+      const j = await r.json().catch(() => ({}));
+      S.ai[id] = r.ok ? { res: j } : { err: j.error || ('HTTP ' + r.status) };
+    } catch (e) { S.ai[id] = { err: 'Network error: ' + (e.message || e) }; }
+    render();
+  }
   else if (a === 'join') await send('join', [BigInt(id)], 'Joined');
   else if (a === 'vote') await send('castVote', [BigInt(id), Number(b.dataset.v)], 'Vote recorded');
   else if (a === 'close') await send('closeVoting', [BigInt(id)], 'Voting closed');
