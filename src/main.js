@@ -1,4 +1,4 @@
-import './style.css';
+import './style.min.css';
 import { createPublicClient, createWalletClient, custom, http, defineChain, keccak256, toHex, getAddress, isAddress } from 'viem';
 import artifact from './artifact.json';
 import { $, esc, num, fp, f2, toast, HORIZONS, riskCalc, ruleReview } from './lib.js';
