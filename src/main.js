@@ -1,7 +1,7 @@
 import './style.min.css';
 import { createPublicClient, createWalletClient, custom, http, defineChain, keccak256, toHex, getAddress, isAddress } from 'viem';
 import artifact from './artifact.json';
-import { $, esc, num, fp, f2, toast, HORIZONS, riskCalc, ruleReview } from './lib.js';
+import { $, esc, num, fp, f2, when, toast, HORIZONS, riskCalc, ruleReview } from './lib.js';
 
 /* ================= chain config (Robinhood Chain TESTNET) ================= */
 const CHAIN = defineChain({
@@ -35,7 +35,7 @@ const S = {
   reg: (ls('tc_reg') && isAddress(ls('tc_reg'))) ? ls('tc_reg') : (isAddress(ENV_REG) ? ENV_REG : ''),
   from: ls('tc_from') || ENV_FROM,
   rooms: new Map(), props: new Map(), loaded: false, loading: false, err: '', busy: false,
-  draft: null,
+  draft: null, bg: { results: null, loading: false, err: '', picked: null }, live: {},
 };
 
 /* ================= wallet ================= */
@@ -161,6 +161,7 @@ function parseThesis(data) {
       pair: s(o.pair).toUpperCase().slice(0, 12), dir: o.dir === 'short' ? 'short' : 'long',
       entry: s(String(o.entry == null ? '' : o.entry)), stop: s(String(o.stop == null ? '' : o.stop)), target: s(String(o.target == null ? '' : o.target)),
       size: s(String(o.size == null ? '' : o.size)), horizon: s(o.horizon), thesis: s(o.thesis),
+      bitget: (o.bitget && typeof o.bitget.symbol === 'string' && /^[A-Z0-9]{3,24}$/.test(o.bitget.symbol)) ? { symbol: o.bitget.symbol, price: String(o.bitget.price || '').slice(0, 24), ts: Number(o.bitget.ts) || 0 } : null,
       evidence: Array.isArray(o.evidence) ? o.evidence.filter(x => typeof x === 'string').slice(0, 8).map(x => x.slice(0, 300)) : [],
     };
   } catch (e) { return null; }
@@ -199,6 +200,38 @@ const roomProps = id => [...S.props.values()].filter(p => p.roomId === id).sort(
 const CH = { 1: 'For', 2: 'Against', 3: 'Abstain' };
 const route = () => { const h = location.hash.replace(/^#\/?/, '').split('/'); return { name: h[0] || 'landing', id: h[1] || '' }; };
 const go = h => { location.hash = '#/' + h; };
+
+/* ================= Bitget public prices (via /api/bitget) ================= */
+async function api(qs) {
+  const r = await fetch('/api/bitget?' + qs);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+  return j;
+}
+async function bgFind() {
+  S.draft = Object.assign(readForm(), { dir: (S.draft && S.draft.dir) || 'long' });
+  const q = S.draft.pair;
+  if (!q) { S.bg.err = 'Type a ticker first, e.g. NVDA.'; render(); return; }
+  S.bg.loading = true; S.bg.err = ''; S.bg.results = null; render();
+  try { const j = await api('action=search&q=' + encodeURIComponent(q)); S.bg.results = j.results; if (!j.results.length) S.bg.err = 'No Bitget spot USDT market matches "' + q + '". You can still enter levels by hand.'; }
+  catch (e) { S.bg.err = 'Bitget lookup failed: ' + e.message; }
+  S.bg.loading = false; render();
+}
+function bgPick(symbol, price, ts) {
+  S.draft = Object.assign(readForm(), { dir: (S.draft && S.draft.dir) || 'long' });
+  S.bg.picked = { symbol, price, ts: Number(ts) || Date.now() };
+  S.draft.entry = String(price);
+  render();
+}
+async function liveFor(symbol) {
+  const c = S.live[symbol];
+  if (c && (c.loading || Date.now() - c.at < 15000)) return;
+  S.live[symbol] = { loading: true, at: Date.now() };
+  try { const j = await api('action=ticker&symbol=' + symbol); S.live[symbol] = { at: Date.now(), price: j.price, bid: j.bid, ask: j.ask, ts: j.ts, change24h: j.change24h }; }
+  catch (e) { S.live[symbol] = { at: Date.now(), err: e.message }; }
+  render();
+}
+const hhmm = ts => { try { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch (e) { return ''; } };
 
 /* ================= views ================= */
 function modes() {
@@ -289,6 +322,7 @@ function vNew(id) {
     '<div class="lbl">New proposal</div>' +
     '<form id="pf" class="card stack" novalidate>' +
     '<div class="f"><label for="np-pair">Stock ticker</label><input id="np-pair" maxlength="12" autocapitalize="characters" placeholder="e.g. NVDA" value="' + esc(d.pair || '') + '"></div>' +
+    '<button type="button" class="btn sm" data-act="bgfind"' + (S.bg.loading ? ' disabled' : '') + '>' + (S.bg.loading ? 'Searching Bitget…' : 'Find live price on Bitget') + '</button>' + bgResults() +
     '<div class="seg"><button type="button" class="' + (d.dir === 'long' ? 'on long' : '') + '" data-act="dir" data-v="long">Long / Buy</button><button type="button" class="' + (d.dir === 'short' ? 'on short' : '') + '" data-act="dir" data-v="short">Short / Sell</button></div>' +
     '<div class="f"><label for="np-entry">Entry price (USD)</label><input id="np-entry" inputmode="decimal" value="' + esc(d.entry || '') + '"></div>' +
     '<div class="f"><label for="np-stop">Stop-loss</label><input id="np-stop" inputmode="decimal" value="' + esc(d.stop || '') + '"></div>' +
@@ -300,6 +334,13 @@ function vNew(id) {
     '<div id="np-err" class="xs" style="color:var(--red)"></div>' +
     '<button class="btn pri blk" type="submit"' + (S.busy ? ' disabled' : '') + '>Submit on-chain</button>' +
     '<p class="xs dim">Prices and levels are what you type. They are labelled user-provided and are not verified by the app.</p></form>';
+}
+function bgResults() {
+  let h = '';
+  if (S.bg.err) h += '<div class="note xs" style="border-color:var(--amber-ln);color:var(--fg)">' + esc(S.bg.err) + '</div>';
+  if (S.bg.results && S.bg.results.length) h += '<div class="stack"><div class="xs mute">Bitget spot markets (USDT). Pick the one that matches your stock, and check what the token tracks. A token price can differ from the stock price.</div>' + S.bg.results.map(r => '<button type="button" class="btn sm" data-act="bgpick" data-s="' + esc(r.symbol) + '" data-p="' + esc(r.price || '') + '" data-t="' + esc(r.ts || '') + '" style="justify-content:space-between"><span class="mono">' + esc(r.symbol) + '</span><span class="mono">' + (r.price ? esc(r.price) + ' USDT' : 'no price') + '</span></button>').join('') + '</div>';
+  if (S.bg.picked) h += '<div class="note xs"><span class="src calc">Bitget live</span> Using <b class="mono">' + esc(S.bg.picked.symbol) + '</b> at ' + esc(S.bg.picked.price) + ' USDT as the entry. Edit the entry if you want a different level.</div>';
+  return h;
 }
 function readForm() {
   const g = i => ($('#' + i) || {}).value || '';
@@ -325,6 +366,15 @@ function reviewHTML(d) {
     '<p class="sm mute">A checklist applied to the text above. It does not check facts, prices or sources, and is not an AI model.</p>' +
     L('Questions to ask the proposer', ['What specific evidence supports this, and where can we check it?', 'Why is the market wrong right now?', 'What would make you exit before the stop?', 'Is an earnings or macro date inside your time horizon?', 'What size are you risking, and is that comfortable if the stop gaps?']) + L('Missing', rv.missing) + L('Counter-case', rv.counter) + L('Assumptions', rv.assumptions) + L('Invalidation', rv.invalidation) + L('Risks', rv.risks) + '</div>';
 }
+function bitgetBlock(b) {
+  const lv = S.live[b.symbol];
+  let live = '<span class="mute">loading…</span>';
+  if (lv && lv.err) live = '<span class="down">unavailable (' + esc(lv.err) + ')</span>';
+  else if (lv && lv.price) live = '<b class="mono">' + esc(lv.price) + ' USDT</b> <span class="xs dim">as of ' + esc(hhmm(lv.ts)) + '</span>';
+  return '<div class="note xs stack"><div class="row sp"><span><span class="src calc">Bitget live</span> <b class="mono">' + esc(b.symbol) + '</b></span><button class="btn sm ghost" data-act="relive" data-s="' + esc(b.symbol) + '">Refresh</button></div>' +
+    '<div class="sm">Now: ' + live + '</div><div class="sm mute">When proposed: ' + esc(b.price) + ' USDT' + (b.ts ? ' (' + esc(when(b.ts)) + ')' : '') + '</div>' +
+    '<div class="xs dim">Price of this Bitget token market, not verified as the underlying stock price. Source: Bitget public API.</div></div>';
+}
 function vProp(id) {
   const p = S.props.get(id);
   if (!p) return '<div class="empty">' + (S.loading ? 'Loading…' : 'Proposal not found.') + '</div>';
@@ -333,7 +383,7 @@ function vProp(id) {
   if (!d) return h + '<div class="note" style="color:var(--red);border-color:var(--red-ln)">This proposal\'s data could not be read.</div>';
   h += '<div class="card stack"><div class="row sp"><div class="row"><h1 class="mono" style="font-size:26px;margin:0">' + esc(d.pair || '—') + '</h1><span class="dir" style="' + (d.dir === 'long' ? 'color:var(--green);background:var(--green-bg)' : 'color:var(--red);background:var(--red-bg)') + '">' + (d.dir === 'long' ? 'LONG' : 'SHORT') + '</span></div><span class="src user">User-provided</span></div>' +
     '<div class="flow"><div class="kv"><div class="lbl">Entry</div><div class="mono">' + esc(d.entry) + '</div></div><div class="kv"><div class="lbl">Stop</div><div class="mono">' + esc(d.stop) + '</div></div><div class="kv"><div class="lbl">Target</div><div class="mono">' + esc(d.target) + '</div></div>' + (d.size ? '<div class="kv"><div class="lbl">Size (USD)</div><div class="mono">' + esc(d.size) + '</div></div>' : '') + '</div>' +
-    '<div class="xs mute">' + esc(d.horizon) + ' · proposed by ' + esc(short(p.author)) + '</div>' +
+    (d.bitget ? bitgetBlock(d.bitget) : '<div class="note xs"><span class="src none">No feed</span> No market price was attached to this proposal. Levels are typed by the proposer.</div>') + '<div class="xs mute">' + esc(d.horizon) + ' · proposed by ' + esc(short(p.author)) + '</div>' +
     '<div class="sm" style="white-space:pre-wrap">' + esc(d.thesis) + '</div>' +
     (d.evidence.length ? '<div><div class="lbl">Evidence</div><ul class="sm" style="margin:8px 0 0;padding-left:18px">' + d.evidence.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>' : '') +
     '<div class="row xs ' + (p.hashOk ? 'up' : 'down') + '">' + (p.hashOk ? '✓ Text matches the hash recorded on-chain' : '✗ Text does NOT match the on-chain hash') + '</div></div>';
@@ -368,6 +418,7 @@ function render() {
   else if (r.name === 'new') h = vNew(r.id);
   else if (r.name === 'p') h = vProp(r.id);
   else h = vLanding();
+  if (r.name === 'p') { const pp = S.props.get(r.id); if (pp && pp.data && pp.data.bitget) liveFor(pp.data.bitget.symbol); }
   const keep = document.activeElement && document.activeElement.id;
   const val = keep ? document.activeElement.value : null;
   $('#app').innerHTML = h;
@@ -395,7 +446,10 @@ document.addEventListener('click', async ev => {
   }
   else if (a === 'room') go('room/' + id);
   else if (a === 'prop') go('p/' + id);
-  else if (a === 'newprop') { S.draft = null; go('new/' + id); }
+  else if (a === 'newprop') { S.draft = null; S.bg = { results: null, loading: false, err: '', picked: null }; go('new/' + id); }
+  else if (a === 'bgfind') await bgFind();
+  else if (a === 'bgpick') bgPick(b.dataset.s, b.dataset.p, b.dataset.t);
+  else if (a === 'relive') { delete S.live[b.dataset.s]; liveFor(b.dataset.s); }
   else if (a === 'dir') { S.draft = Object.assign(readForm(), { dir: b.dataset.v }); render(); }
   else if (a === 'newroom') {
     const n = ($('#rn').value || '').trim();
@@ -425,6 +479,7 @@ document.addEventListener('submit', async ev => {
   if (errs.length) { $('#np-err').innerHTML = errs.map(esc).join('<br>'); return; }
   const rid = route().id;
   const body = { pair: d.pair, dir: d.dir, entry: d.entry, stop: d.stop, target: d.target, size: d.size, horizon: d.horizon, thesis: d.thesis, evidence: d.evidence.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 8) };
+  if (S.bg.picked) body.bitget = { symbol: S.bg.picked.symbol, price: String(S.bg.picked.price), ts: S.bg.picked.ts };
   const data = JSON.stringify(body);
   if (new TextEncoder().encode(data).length > 3900) { $('#np-err').textContent = 'Too long. Shorten the thesis or evidence.'; return; }
   const hash = keccak256(toHex(data));
