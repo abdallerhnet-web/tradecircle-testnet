@@ -35,7 +35,7 @@ const S = {
   reg: (ls('tc_reg') && isAddress(ls('tc_reg'))) ? ls('tc_reg') : (isAddress(ENV_REG) ? ENV_REG : ''),
   from: ls('tc_from') || ENV_FROM,
   rooms: new Map(), props: new Map(), loaded: false, loading: false, err: '', busy: false,
-  draft: null, bg: { results: null, loading: false, err: '', picked: null }, live: {},
+  draft: null, mk: { items: null, loading: false, err: '', at: 0, filter: '' }, mkOpen: false, bg: { results: null, loading: false, err: '', picked: null }, live: {},
 };
 
 /* ================= wallet ================= */
@@ -231,6 +231,33 @@ async function liveFor(symbol) {
   catch (e) { S.live[symbol] = { at: Date.now(), err: e.message }; }
   render();
 }
+async function fetchMarkets() {
+  if (S.mk.loading) return;
+  S.mk.loading = true; S.mk.err = ''; renderKeep();
+  try { const j = await api('action=list'); S.mk.items = j.results || []; S.mk.at = Date.now(); }
+  catch (e) { S.mk.err = 'Could not load the Bitget list: ' + e.message; }
+  S.mk.loading = false; renderKeep();
+}
+function renderKeep() { render(); }
+function mkRows(pick) {
+  const f = (S.mk.filter || '').trim().toUpperCase();
+  const items = (S.mk.items || []).filter(x => !f || x.base.toUpperCase().includes(f) || x.symbol.toUpperCase().includes(f));
+  if (!S.mk.items) return S.mk.loading ? '<div class="sk"></div><div class="sk"></div>' : '';
+  if (!items.length) return '<div class="empty">No Bitget stock-token market matches that search.</div>';
+  return '<div class="mk-list">' + items.map(x => {
+    const ch = isFinite(num(x.change24h)) ? num(x.change24h) * 100 : NaN;
+    const inner = '<span><b class="mono">' + esc(x.base.replace(/^r/, '')) + '</b><span class="xs dim"> ' + esc(x.symbol) + '</span></span><span class="mono">' + (x.price ? esc(x.price) : '—') + '</span><span class="mono xs ' + (ch >= 0 ? 'up' : 'down') + '">' + (isFinite(ch) ? (ch >= 0 ? '+' : '') + ch.toFixed(2) + '%' : '') + '</span>';
+    return pick ? '<button type="button" class="mk-row" data-act="mkpick" data-s="' + esc(x.symbol) + '" data-p="' + esc(x.price || '') + '" data-t="' + esc(x.ts || '') + '" data-b="' + esc(x.base.replace(/^r/, '')) + '">' + inner + '</button>' : '<div class="mk-row">' + inner + '</div>';
+  }).join('') + '</div>';
+}
+function vMarkets() {
+  return '<div class="lbl">Markets · Bitget live</div>' +
+    '<div class="note xs">Bitget spot markets in USDT whose token name starts with a lowercase “r” (how Bitget names its tokenized stocks, as observed; not an official list). These are token prices, which can differ from the stock\'s official price. Source: Bitget public API. Not advice.</div>' +
+    '<div class="row"><div class="f grow"><label for="mk-q">Search</label><input id="mk-q" placeholder="e.g. NVDA, TSLA, AAPL" autocapitalize="characters" autocomplete="off" value="' + esc(S.mk.filter) + '"></div><button class="btn sm" data-act="mkrefresh" style="align-self:end">' + (S.mk.loading ? 'Loading…' : 'Refresh') + '</button></div>' +
+    (S.mk.err ? '<div class="note xs" style="color:var(--red);border-color:var(--red-ln)">' + esc(S.mk.err) + '</div>' : '') +
+    '<div id="mk-list">' + mkRows(false) + '</div>' +
+    (S.mk.at ? '<div class="xs dim">Updated ' + hhmm(S.mk.at) + ' · ' + (S.mk.items || []).length + ' markets</div>' : '');
+}
 const hhmm = ts => { try { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch (e) { return ''; } };
 
 /* ================= views ================= */
@@ -291,7 +318,7 @@ function vRooms() {
   h += '<div class="lbl">Rooms</div>';
   if (!S.loaded || (S.loading && !rooms.length)) h += '<div class="sk"></div><div class="sk"></div>';
   else if (!rooms.length) h += '<div class="empty">No rooms on this registry yet. Create the first one above.</div>';
-  else h += '<div class="stack">' + rooms.map(r => '<button class="card" data-act="room" data-id="' + esc(r.id) + '" style="text-align:left;cursor:pointer"><div class="row sp"><b>' + esc(r.name) + '</b><span class="src calc">On-chain</span></div><div class="xs mute" style="margin-top:6px">' + r.members.size + ' member' + (r.members.size === 1 ? '' : 's') + ' · ' + roomProps(r.id).length + ' proposal' + (roomProps(r.id).length === 1 ? '' : 's') + ' · created by ' + esc(short(r.creator)) + '</div></button>').join('') + '</div>';
+  else h += '<div class="stack cards">' + rooms.map(r => '<button class="card" data-act="room" data-id="' + esc(r.id) + '" style="text-align:left;cursor:pointer"><div class="row sp"><b>' + esc(r.name) + '</b><span class="src calc">On-chain</span></div><div class="xs mute" style="margin-top:6px">' + r.members.size + ' member' + (r.members.size === 1 ? '' : 's') + ' · ' + roomProps(r.id).length + ' proposal' + (roomProps(r.id).length === 1 ? '' : 's') + ' · created by ' + esc(short(r.creator)) + '</div></button>').join('') + '</div>';
   return h;
 }
 function propRow(p) {
@@ -311,7 +338,7 @@ function vRoom(id) {
   if (!mem) h += '<div class="card stack"><p class="sm mute">Only members can propose and vote. Joining is one on-chain transaction from your wallet.</p><button class="btn pri blk" data-act="join" data-id="' + esc(id) + '"' + (S.busy ? ' disabled' : '') + '>Join this room</button></div>';
   else h += '<button class="btn pri blk" data-act="newprop" data-id="' + esc(id) + '">New proposal</button>';
   h += '<div class="lbl">Proposals</div>';
-  h += ps.length ? '<div class="stack">' + ps.map(propRow).join('') + '</div>' : '<div class="empty">No proposals yet.</div>';
+  h += ps.length ? '<div class="stack cards">' + ps.map(propRow).join('') + '</div>' : '<div class="empty">No proposals yet.</div>';
   return h;
 }
 function vNew(id) {
@@ -322,7 +349,7 @@ function vNew(id) {
     '<div class="lbl">New proposal</div>' +
     '<form id="pf" class="card stack" novalidate>' +
     '<div class="f"><label for="np-pair">Stock ticker</label><input id="np-pair" maxlength="12" autocapitalize="characters" placeholder="e.g. NVDA" value="' + esc(d.pair || '') + '"></div>' +
-    '<button type="button" class="btn sm" data-act="bgfind"' + (S.bg.loading ? ' disabled' : '') + '>' + (S.bg.loading ? 'Searching Bitget…' : 'Find live price on Bitget') + '</button>' + bgResults() +
+    '<button type="button" class="btn sm" data-act="mktoggle">' + (S.mkOpen ? 'Hide stock list' : 'Browse Bitget stock list') + '</button>' + (S.mkOpen ? '<div class="mk-pick"><div class="xs mute">Tap a stock to fill the ticker and entry price. Token prices can differ from the stock\'s official price.</div><div class="f"><input id="mk-q" placeholder="Search" autocapitalize="characters" autocomplete="off" value="' + esc(S.mk.filter) + '"></div><div id="mk-list">' + mkRows(true) + '</div></div>' : '') + '<button type="button" class="btn sm" data-act="bgfind"' + (S.bg.loading ? ' disabled' : '') + '>' + (S.bg.loading ? 'Searching Bitget…' : 'Find live price on Bitget') + '</button>' + bgResults() +
     '<div class="seg"><button type="button" class="' + (d.dir === 'long' ? 'on long' : '') + '" data-act="dir" data-v="long">Long / Buy</button><button type="button" class="' + (d.dir === 'short' ? 'on short' : '') + '" data-act="dir" data-v="short">Short / Sell</button></div>' +
     '<div class="f"><label for="np-entry">Entry price (USD)</label><input id="np-entry" inputmode="decimal" value="' + esc(d.entry || '') + '"></div>' +
     '<div class="f"><label for="np-stop">Stop-loss</label><input id="np-stop" inputmode="decimal" value="' + esc(d.stop || '') + '"></div>' +
@@ -414,14 +441,17 @@ function render() {
   const r = route(); let h = '';
   if (r.name === 'landing') h = vLanding();
   else if (r.name === 'rooms') h = vRooms();
+  else if (r.name === 'markets') h = vMarkets();
   else if (r.name === 'room') h = vRoom(r.id);
   else if (r.name === 'new') h = vNew(r.id);
   else if (r.name === 'p') h = vProp(r.id);
   else h = vLanding();
+  if (r.name === 'markets' && !S.mk.items && !S.mk.loading && !S.mk.err) fetchMarkets();
   if (r.name === 'p') { const pp = S.props.get(r.id); if (pp && pp.data && pp.data.bitget) liveFor(pp.data.bitget.symbol); }
   const keep = document.activeElement && document.activeElement.id;
   const val = keep ? document.activeElement.value : null;
-  $('#app').innerHTML = h;
+  const nav = r.name === 'landing' ? '' : '<div class="navrow"><button data-act="rooms" class="' + (/^(rooms|room|new|p)$/.test(r.name) ? 'on' : '') + '">Rooms</button><button data-act="markets" class="' + (r.name === 'markets' ? 'on' : '') + '">Markets</button></div>';
+  $('#app').innerHTML = nav + h;
   if (keep && val != null && $('#' + keep) && ['INPUT', 'TEXTAREA'].includes($('#' + keep).tagName) && !$('#' + keep).value) { $('#' + keep).value = val; }
 }
 window.addEventListener('hashchange', () => { window.scrollTo(0, 0); render(); });
@@ -447,6 +477,10 @@ document.addEventListener('click', async ev => {
   else if (a === 'room') go('room/' + id);
   else if (a === 'prop') go('p/' + id);
   else if (a === 'newprop') { S.draft = null; S.bg = { results: null, loading: false, err: '', picked: null }; go('new/' + id); }
+  else if (a === 'markets') go('markets');
+  else if (a === 'mkrefresh') { S.mk.items = null; S.mk.err = ''; await fetchMarkets(); }
+  else if (a === 'mktoggle') { S.draft = Object.assign(readForm(), { dir: (S.draft && S.draft.dir) || 'long' }); S.mkOpen = !S.mkOpen; render(); if (S.mkOpen && !S.mk.items) fetchMarkets(); }
+  else if (a === 'mkpick') { const pi = $('#np-pair'); if (pi) pi.value = b.dataset.b; S.mkOpen = false; bgPick(b.dataset.s, b.dataset.p, b.dataset.t); }
   else if (a === 'bgfind') await bgFind();
   else if (a === 'bgpick') bgPick(b.dataset.s, b.dataset.p, b.dataset.t);
   else if (a === 'relive') { delete S.live[b.dataset.s]; liveFor(b.dataset.s); }
@@ -467,6 +501,11 @@ document.addEventListener('click', async ev => {
   }
 });
 
+document.addEventListener('input', ev => {
+  if (ev.target.id !== 'mk-q') return;
+  S.mk.filter = ev.target.value;
+  const el = $('#mk-list'); if (el) el.innerHTML = mkRows(route().name === 'new');
+});
 document.addEventListener('submit', async ev => {
   if (ev.target.id !== 'pf') return;
   ev.preventDefault();
@@ -497,5 +536,6 @@ document.addEventListener('submit', async ev => {
     } catch (e) { /* not connected yet */ }
   }
   await load();
-  setInterval(() => { if (S.reg && !S.busy && !document.hidden && /^(room|p)$/.test(route().name)) load(); }, 20000);
+  setInterval(() => { if (route().name === 'markets' && !document.hidden && !S.mk.loading) { S.mk.items = S.mk.items; S.mk.loading = false; api('action=list').then(j => { S.mk.items = j.results || []; S.mk.at = Date.now(); if (route().name === 'markets') { const el = $('#mk-list'); if (el) el.innerHTML = mkRows(false); } }).catch(() => {}); }
+   if (S.reg && !S.busy && !document.hidden && /^(room|p)$/.test(route().name)) load(); }, 20000);
 })();

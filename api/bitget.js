@@ -29,6 +29,15 @@ export default async function handler(req, res) {
         .slice(0, 15).map(s => { const t = px.get(s.symbol) || {}; return { symbol: s.symbol, base: s.baseCoin, price: t.lastPr || null, ts: t.ts ? Number(t.ts) : null }; });
       return res.status(200).json({ results: out, source: 'Bitget spot (public API)' });
     }
+    if (q.action === 'list') {
+      // Bitget's tokenized-stock markets, as observed, use a lowercase 'r' prefix on the base coin (e.g. rNVDA). This is a naming heuristic, not an official classification.
+      const [syms, ticks] = await Promise.all([get('/public/symbols'), get('/market/tickers')]);
+      const px = new Map(ticks.map(t => [t.symbol, t]));
+      const out = syms.filter(s => s.status === 'online' && s.quoteCoin === 'USDT' && /^r[A-Z0-9]{2,7}$/.test(s.baseCoin))
+        .map(s => { const t = px.get(s.symbol) || {}; return { symbol: s.symbol, base: s.baseCoin, price: t.lastPr || null, change24h: t.change24h || null, vol: Number(t.usdtVolume) || 0, ts: t.ts ? Number(t.ts) : null }; })
+        .sort((x, y) => y.vol - x.vol).slice(0, 300);
+      return res.status(200).json({ results: out, source: 'Bitget spot (public API)', fetchedAt: Date.now() });
+    }
     return res.status(400).json({ error: 'unknown action' });
   } catch (e) {
     return res.status(502).json({ error: String(e.message || e).slice(0, 200) });
