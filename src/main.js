@@ -323,7 +323,7 @@ function reviewHTML(d) {
   const L = (t, a) => a.length ? '<div><div class="lbl">' + t + '</div><ul style="margin:8px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:5px" class="sm">' + a.map(x => '<li>' + esc(typeof x === 'string' ? x : x.point) + '</li>').join('') + '</ul></div>' : '';
   return '<div class="card stack"><div class="row sp"><div class="lbl">Review</div><span class="src none">Rules-based</span></div>' +
     '<p class="sm mute">A checklist applied to the text above. It does not check facts, prices or sources, and is not an AI model.</p>' +
-    L('Questions to ask the proposer', rv.missing.map(m => m.replace(/^No /, 'Can you add ').replace(/\.$/, '?')).concat(['What would make you exit before the stop?', 'Is an earnings or macro date inside your time horizon?'])) + L('Missing', rv.missing) + L('Counter-case', rv.counter) + L('Assumptions', rv.assumptions) + L('Invalidation', rv.invalidation) + L('Risks', rv.risks) + '</div>';
+    L('Questions to ask the proposer', ['What specific evidence supports this, and where can we check it?', 'Why is the market wrong right now?', 'What would make you exit before the stop?', 'Is an earnings or macro date inside your time horizon?', 'What size are you risking, and is that comfortable if the stop gaps?']) + L('Missing', rv.missing) + L('Counter-case', rv.counter) + L('Assumptions', rv.assumptions) + L('Invalidation', rv.invalidation) + L('Risks', rv.risks) + '</div>';
 }
 function vProp(id) {
   const p = S.props.get(id);
