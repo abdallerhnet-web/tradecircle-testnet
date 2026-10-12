@@ -526,10 +526,10 @@ document.addEventListener('click', async ev => {
     S.ai[id] = { loading: true }; render();
     try {
       const d = p.data;
-      const r = await fetch('/api/review', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pair: d.pair, dir: d.dir, entry: d.entry, stop: d.stop, target: d.target, size: d.size, horizon: d.horizon, thesis: d.thesis, evidence: d.evidence, live: d.bitget ? d.bitget.symbol + ' ' + d.bitget.price : '' }) });
+      const r = await fetch('/api/review', { method: 'POST', signal: AbortSignal.timeout(28000), headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pair: d.pair, dir: d.dir, entry: d.entry, stop: d.stop, target: d.target, size: d.size, horizon: d.horizon, thesis: d.thesis, evidence: d.evidence, live: d.bitget ? d.bitget.symbol + ' ' + d.bitget.price : '' }) });
       const j = await r.json().catch(() => ({}));
       S.ai[id] = r.ok ? { res: j } : { err: j.error || ('HTTP ' + r.status) };
-    } catch (e) { S.ai[id] = { err: 'Network error: ' + (e.message || e) }; }
+    } catch (e) { S.ai[id] = { err: (e && e.name === 'TimeoutError') ? 'The AI took too long. Tap the button to try again.' : 'Network error: ' + (e.message || e) }; }
     render();
   }
   else if (a === 'join') await send('join', [BigInt(id)], 'Joined');
