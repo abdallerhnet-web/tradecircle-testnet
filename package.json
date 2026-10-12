@@ -2,6 +2,7 @@
   "name": "tradecircle-testnet",
   "private": true,
   "type": "module",
+  "license": "MIT",
   "scripts": { "build": "node scripts/compile.mjs && vite build", "dev": "vite" },
   "dependencies": { "solc": "0.8.26", "viem": "^2.21.0", "vite": "^5.4.0" }
 }

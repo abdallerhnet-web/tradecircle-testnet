@@ -80,4 +80,4 @@ With no AI key set, the AI button shows that AI review is not enabled. Rooms, pr
 
 ## License
 
-No license has been chosen yet.
+[MIT](LICENSE)
