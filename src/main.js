@@ -440,7 +440,7 @@ function vProp(id) {
     '<div class="sm" style="white-space:pre-wrap">' + esc(d.thesis) + '</div>' +
     (d.evidence.length ? '<div><div class="lbl">Evidence</div><ul class="sm" style="margin:8px 0 0;padding-left:18px">' + d.evidence.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>' : '') +
     '<div class="row xs ' + (p.hashOk ? 'up' : 'down') + '">' + (p.hashOk ? '✓ Text matches the hash recorded on-chain' : '✗ Text does NOT match the on-chain hash') + '</div></div>';
-  h += riskHTML(d) + aiHTML(d, id) + reviewHTML(d);
+  h += riskHTML(d) + aiHTML(d, id);
   const pct = x => t.total ? Math.round(x / t.total * 100) : 0;
   h += '<div class="card stack"><div class="row sp"><div class="lbl">Votes</div><span class="src calc">On-chain</span></div>' +
     '<div class="bar"><i style="width:' + pct(t.y) + '%;background:var(--green)"></i><i style="width:' + pct(t.n) + '%;background:var(--red)"></i><i style="width:' + pct(t.ab) + '%;background:var(--dim)"></i></div>' +
