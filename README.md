@@ -54,7 +54,7 @@ npm run dev        # local dev server (needs the compiled artifact from a build 
 ```
 
 1. Install a wallet and get testnet ETH from the Robinhood Chain testnet faucet.
-2. Open the app, connect, and use **Deploy a new registry** if you have no registry address yet.
+2. Open the app, connect, and use **Deploy registry** if you have no registry address yet.
 3. Share the invite link. It carries the registry address (`?reg=0x…&from=<block>`).
 
 ### Environment variables (Vercel)
