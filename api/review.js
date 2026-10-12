@@ -34,9 +34,19 @@ export default async function handler(req, res) {
     let text = '', model = MODEL;
     let done = false;
     if (qkey) {
-      const gm = [process.env.GROQ_MODEL || 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+      // Model names change often, so ask Groq which models this key can use.
+      let gm = [];
+      try {
+        const mr = await fetch('https://api.groq.com/openai/v1/models', { headers: { authorization: 'Bearer ' + qkey }, signal: AbortSignal.timeout(5000) });
+        const mj = await mr.json().catch(() => ({}));
+        const ids = (mj.data || []).filter(m => m && m.active !== false).map(m => String(m.id)).filter(id => !/whisper|guard|tts|embed|playai|orpheus|safeguard|compound|distil/i.test(id));
+        const rank = id => { const t = [/gpt-oss-20b/, /llama-3\.3-70b/, /llama-4/, /gpt-oss-120b/, /kimi/, /qwen/, /llama/]; const i = t.findIndex(r => r.test(id)); return i < 0 ? 99 : i; };
+        gm = ids.sort((x, y) => rank(x) - rank(y)).slice(0, 3);
+      } catch (me) { /* fall through */ }
+      if (process.env.GROQ_MODEL) gm.unshift(process.env.GROQ_MODEL);
+      if (!gm.length) gm = ['openai/gpt-oss-20b', 'llama-3.3-70b-versatile'];
       let lastQ = '';
-      for (let i = 0; i < 2 && !done; i++) {
+      for (let i = 0; i < Math.min(gm.length, 3) && !done; i++) {
         model = gm[i];
         try {
           const qr = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -45,10 +55,10 @@ export default async function handler(req, res) {
           });
           const qj = await qr.json().catch(() => ({}));
           if (qr.ok) { text = (((qj.choices || [])[0] || {}).message || {}).content || ''; done = true; }
-          else lastQ = 'AI service error (' + qr.status + '): ' + s(qj && qj.error && qj.error.message, 160);
-        } catch (qe) { lastQ = 'The AI is slow right now. Tap the button to try again.'; }
+          else lastQ += (lastQ ? ' | ' : '') + model + ' ' + qr.status + ': ' + s(qj && qj.error && qj.error.message, 90);
+        } catch (qe) { lastQ += (lastQ ? ' | ' : '') + model + ' timed out'; }
       }
-      if (!done && !key && !gkey) return res.status(502).json({ error: lastQ });
+      if (!done && !key && !gkey) return res.status(502).json({ error: 'Groq failed: ' + lastQ });
     }
     if (done) { /* answered by Groq */ }
     else if (!key) {
