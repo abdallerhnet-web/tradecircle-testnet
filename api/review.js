@@ -22,13 +22,21 @@ export default async function handler(req, res) {
     if (!p.ticker || !p.thesis) return res.status(400).json({ error: 'Proposal is missing a ticker or thesis.' });
     let text = '', model = MODEL;
     if (!key) {
-      model = process.env.GEMINI_MODEL || 'gemini-flash-latest';
-      const gr = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
-        method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': gkey },
-        body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM }] }, contents: [{ role: 'user', parts: [{ text: '<proposal>\n' + JSON.stringify(p, null, 1) + '\n</proposal>' }] }], generationConfig: { maxOutputTokens: 900, responseMimeType: 'application/json' } }),
-      });
-      const gj = await gr.json().catch(() => ({}));
-      if (!gr.ok) return res.status(502).json({ error: 'AI service error (' + gr.status + '): ' + s(gj && gj.error && gj.error.message, 160) });
+      const models = [process.env.GEMINI_MODEL || 'gemini-flash-latest', 'gemini-flash-lite-latest'];
+      let gj = {}, lastErr = '';
+      for (let i = 0; i < 4; i++) {
+        model = models[i < 2 ? 0 : 1];
+        const gr = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
+          method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': gkey },
+          body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM }] }, contents: [{ role: 'user', parts: [{ text: '<proposal>\n' + JSON.stringify(p, null, 1) + '\n</proposal>' }] }], generationConfig: { maxOutputTokens: 900, responseMimeType: 'application/json' } }),
+        });
+        gj = await gr.json().catch(() => ({}));
+        if (gr.ok) { lastErr = ''; break; }
+        lastErr = 'AI service error (' + gr.status + '): ' + s(gj && gj.error && gj.error.message, 160);
+        if (![429, 500, 503].includes(gr.status)) break;
+        await new Promise(r => setTimeout(r, 1200));
+      }
+      if (lastErr) return res.status(502).json({ error: lastErr });
       text = (((gj.candidates || [])[0] || {}).content || {}).parts ? gj.candidates[0].content.parts.map(x => x.text || '').join('').trim() : '';
     } else {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
