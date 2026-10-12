@@ -12,8 +12,8 @@ export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
-  const key = process.env.ANTHROPIC_API_KEY, gkey = process.env.GEMINI_API_KEY;
-  if (!key && !gkey) return res.status(503).json({ error: 'AI review is not enabled on this deployment yet.' });
+  const key = process.env.ANTHROPIC_API_KEY, gkey = process.env.GEMINI_API_KEY, qkey = process.env.GROQ_API_KEY;
+  if (!key && !gkey && !qkey) return res.status(503).json({ error: 'AI review is not enabled on this deployment yet.' });
   const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'x';
   const now = Date.now(), arr = (hits.get(ip) || []).filter(t => now - t < 600000);
   if (arr.length >= 8) return res.status(429).json({ error: 'Too many AI reviews. Try again in a few minutes.' });
@@ -32,7 +32,26 @@ export default async function handler(req, res) {
     p.computed = comp;
     if (!p.ticker || !p.thesis) return res.status(400).json({ error: 'Proposal is missing a ticker or thesis.' });
     let text = '', model = MODEL;
-    if (!key) {
+    let done = false;
+    if (qkey) {
+      const gm = [process.env.GROQ_MODEL || 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+      let lastQ = '';
+      for (let i = 0; i < 2 && !done; i++) {
+        model = gm[i];
+        try {
+          const qr = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST', signal: AbortSignal.timeout(10000), headers: { 'content-type': 'application/json', authorization: 'Bearer ' + qkey },
+            body: JSON.stringify({ model, temperature: 0.3, max_tokens: 900, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: '<proposal>\n' + JSON.stringify(p, null, 1) + '\n</proposal>' }] }),
+          });
+          const qj = await qr.json().catch(() => ({}));
+          if (qr.ok) { text = (((qj.choices || [])[0] || {}).message || {}).content || ''; done = true; }
+          else lastQ = 'AI service error (' + qr.status + '): ' + s(qj && qj.error && qj.error.message, 160);
+        } catch (qe) { lastQ = 'The AI is slow right now. Tap the button to try again.'; }
+      }
+      if (!done && !key && !gkey) return res.status(502).json({ error: lastQ });
+    }
+    if (done) { /* answered by Groq */ }
+    else if (!key) {
       const models = ['gemini-flash-lite-latest', process.env.GEMINI_MODEL || 'gemini-flash-latest'];
       let gj = {}, lastErr = '';
       for (let i = 0; i < 2; i++) {
