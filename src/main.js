@@ -407,10 +407,10 @@ function aiHTML(d, id) {
   const a = S.ai[id] || {};
   const L = (t, arr) => arr && arr.length ? '<div><div class="lbl">' + t + '</div><ul style="margin:8px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:5px" class="sm">' + arr.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>' : '';
   let b = '<div class="card stack"><div class="row sp"><div class="lbl">AI review</div><span class="src none">AI-generated</span></div>';
-  if (a.res) b += '<p class="sm">' + esc(a.res.summary) + '</p>' + L('Questions to ask', a.res.questions) + L('Weak points', a.res.weak_points) + L('Missing', a.res.missing) + L('Risks', a.res.risks) + '<div class="note xs">Written by an AI model (' + esc(a.res.model) + ') from the text above only. It cannot see live prices or news, can be wrong, and is not advice. Not stored on-chain.</div>';
-  else b += '<p class="sm mute">Ask an AI model to challenge this proposal: sharp questions, weak points, what is missing. It only reads the text above and never recommends a trade.</p>';
+  if (a.res) { const r = a.res; b += '<div class="note"><b>In one line</b><div class="sm" style="margin-top:6px">' + esc(r.tldr) + '</div></div><div><div class="lbl">Explained simply</div><p class="sm" style="margin:8px 0 0;line-height:1.6">' + esc(r.explain_like_5) + '</p></div>' + L('What the numbers mean', r.the_numbers) + L('What could go wrong', r.what_could_go_wrong) + L('Check before you vote', r.check_before_voting) + '<div class="note xs">Written by an AI model (' + esc(r.model) + ') from the proposal text only. Percentages are computed from the typed numbers. It cannot see live prices or news, can be wrong, and is not advice. Not stored on-chain.</div>'; }
+  else b += '<p class="sm mute">Get a plain-language summary of this trade idea, what the numbers mean, and what to check before voting. It only reads the text above and never recommends a trade.</p>';
   if (a.err) b += '<div class="note xs" style="color:var(--red);border-color:var(--red-ln)">' + esc(a.err) + '</div>';
-  return b + '<button class="btn blk" data-act="airev" data-id="' + esc(id) + '"' + (a.loading ? ' disabled' : '') + '>' + (a.loading ? 'Thinking…' : (a.res ? 'Run again' : 'Ask AI to review')) + '</button></div>';
+  return b + '<button class="btn blk" data-act="airev" data-id="' + esc(id) + '"' + (a.loading ? ' disabled' : '') + '>' + (a.loading ? 'Thinking…' : (a.res ? 'Run again' : 'Explain this trade to me')) + '</button></div>';
 }
 function reviewHTML(d) {
   const rv = ruleReview(d);
