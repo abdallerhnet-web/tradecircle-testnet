@@ -39,7 +39,7 @@ export default async function handler(req, res) {
         model = models[i === 0 ? 0 : (i === 1 ? 1 : 0)];
         const gr = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
           method: 'POST', signal: AbortSignal.timeout(9000), headers: { 'content-type': 'application/json', 'x-goog-api-key': gkey },
-          body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM }] }, contents: [{ role: 'user', parts: [{ text: '<proposal>\n' + JSON.stringify(p, null, 1) + '\n</proposal>' }] }], generationConfig: { maxOutputTokens: 1000, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } } }),
+          body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM }] }, contents: [{ role: 'user', parts: [{ text: '<proposal>\n' + JSON.stringify(p, null, 1) + '\n</proposal>' }] }], generationConfig: { maxOutputTokens: 1000, responseMimeType: 'application/json' } }),
         });
         gj = await gr.json().catch(() => ({}));
         if (gr.ok) { lastErr = ''; break; }
